@@ -77,3 +77,6 @@ func (attr *Attribute) EncodeBinary(w io.Writer) error {
 	}
 	return errors.New("format error in encoding transaction attribute")
 }
+
+// EncodeBinary implements the Payload interface.
+func (attr *Attribute) EncodeBinary(w io.Writer) error { return nil }
