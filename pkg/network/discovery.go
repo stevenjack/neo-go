@@ -66,7 +66,6 @@ func (d *DefaultDiscovery) BackFill(addrs ...string) {
 	if len(d.pool) == maxPoolSize {
 		return
 	}
-
 	for _, addr := range addrs {
 		d.backFill <- addr
 	}
@@ -109,7 +108,6 @@ func (d *DefaultDiscovery) BadPeers() []string {
 func (d *DefaultDiscovery) work(addrCh chan string) {
 	for {
 		addr := <-addrCh
-
 		if err := d.transport.Dial(addr, d.dialTimeout); err != nil {
 			d.badAddrCh <- addr
 		} else {
