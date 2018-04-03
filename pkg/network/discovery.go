@@ -124,9 +124,8 @@ func (d *DefaultDiscovery) run() {
 	var (
 		maxWorkers = 5
 		workCh     = make(chan string)
+		wg         sync.WaitGroup
 	)
-
-	var wg sync.WaitGroup
 
 	for i := 0; i < maxWorkers; i++ {
 		go d.work(workCh)
@@ -135,7 +134,6 @@ func (d *DefaultDiscovery) run() {
 	wg.Add(1)
 
 	go func() {
-
 		for {
 			select {
 			case addr := <-d.backFill:
