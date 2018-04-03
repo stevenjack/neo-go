@@ -50,6 +50,7 @@ func (d testDiscovery) RegisterBadAddr(string)     {}
 func (d testDiscovery) UnconnectedPeers() []string { return []string{} }
 func (d testDiscovery) RequestRemote(n int)        {}
 func (d testDiscovery) BadPeers() []string         { return []string{} }
+func (d testDiscovery) Close()                     {}
 
 type localTransport struct{}
 

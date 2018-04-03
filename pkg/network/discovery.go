@@ -1,6 +1,7 @@
 package network
 
 import (
+	"sync"
 	"time"
 )
 
@@ -17,6 +18,7 @@ type Discoverer interface {
 	RegisterBadAddr(string)
 	UnconnectedPeers() []string
 	BadPeers() []string
+	Close()
 }
 
 // DefaultDiscovery default implementation of the Discoverer interface.
@@ -30,6 +32,7 @@ type DefaultDiscovery struct {
 	connectedCh      chan string
 	backFill         chan string
 	badAddrCh        chan string
+	closeChan        chan bool
 	pool             chan string
 }
 
@@ -45,10 +48,16 @@ func NewDefaultDiscovery(dt time.Duration, ts Transporter) *DefaultDiscovery {
 		connectedCh:      make(chan string),
 		backFill:         make(chan string),
 		badAddrCh:        make(chan string),
+		closeChan:        make(chan bool),
 		pool:             make(chan string, maxPoolSize),
 	}
 	go d.run()
 	return d
+}
+
+// Close closes the discoverer.
+func (d *DefaultDiscovery) Close() {
+	d.closeChan <- true
 }
 
 // BackFill implements the Discoverer interface and will backfill the
@@ -57,6 +66,7 @@ func (d *DefaultDiscovery) BackFill(addrs ...string) {
 	if len(d.pool) == maxPoolSize {
 		return
 	}
+
 	for _, addr := range addrs {
 		d.backFill <- addr
 	}
@@ -99,6 +109,7 @@ func (d *DefaultDiscovery) BadPeers() []string {
 func (d *DefaultDiscovery) work(addrCh chan string) {
 	for {
 		addr := <-addrCh
+
 		if err := d.transport.Dial(addr, d.dialTimeout); err != nil {
 			d.badAddrCh <- addr
 		} else {
@@ -117,36 +128,48 @@ func (d *DefaultDiscovery) run() {
 		workCh     = make(chan string)
 	)
 
+	var wg sync.WaitGroup
+
 	for i := 0; i < maxWorkers; i++ {
 		go d.work(workCh)
 	}
 
-	for {
-		select {
-		case addr := <-d.backFill:
-			if _, ok := d.badAddrs[addr]; ok {
-				break
-			}
-			if _, ok := d.addrs[addr]; !ok {
-				d.addrs[addr] = true
-				d.unconnectedAddrs[addr] = true
-				d.pool <- addr
-			}
-		case n := <-d.requestCh:
-			go func() {
-				for i := 0; i < n; i++ {
-					workCh <- d.next()
-				}
-			}()
-		case addr := <-d.badAddrCh:
-			d.badAddrs[addr] = true
-			delete(d.unconnectedAddrs, addr)
-			go func() {
-				workCh <- d.next()
-			}()
+	wg.Add(1)
 
-		case addr := <-d.connectedCh:
-			delete(d.unconnectedAddrs, addr)
+	go func() {
+
+		for {
+			select {
+			case addr := <-d.backFill:
+				if _, ok := d.badAddrs[addr]; ok {
+					break
+				}
+				if _, ok := d.addrs[addr]; !ok {
+					d.addrs[addr] = true
+					d.unconnectedAddrs[addr] = true
+					d.pool <- addr
+				}
+			case n := <-d.requestCh:
+				go func() {
+					for i := 0; i < n; i++ {
+						workCh <- d.next()
+					}
+				}()
+			case addr := <-d.badAddrCh:
+				d.badAddrs[addr] = true
+				delete(d.unconnectedAddrs, addr)
+				go func() {
+					workCh <- d.next()
+				}()
+
+			case addr := <-d.connectedCh:
+				delete(d.unconnectedAddrs, addr)
+
+			case <-d.closeChan:
+				wg.Done()
+			}
 		}
-	}
+	}()
+
+	wg.Wait()
 }

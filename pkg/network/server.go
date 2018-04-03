@@ -106,13 +106,18 @@ func (s *Server) Shutdown() {
 	log.WithFields(log.Fields{
 		"peers": s.PeerCount(),
 	}).Info("shutting down server")
+	s.discovery.Close()
 	close(s.quit)
 }
 
+// UnconnectedPeers returns the current count of
+// peers the node isn't connected to but has discovered.
 func (s *Server) UnconnectedPeers() []string {
 	return s.discovery.UnconnectedPeers()
 }
 
+// BadPeers returns the current count of peers
+// the node has classed as bad.
 func (s *Server) BadPeers() []string {
 	return s.discovery.BadPeers()
 }
